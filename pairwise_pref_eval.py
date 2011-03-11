@@ -43,29 +43,21 @@ class PreferenceGraph(object):
 
     return 'Edges:\n  %s\nBadDocs:\n  %s' % (edges_str, bad_docs_str)
 
+  def add_bad_doc(self, bad_doc):
+    '''Adds a document to the set of BAD docs. If the document has already been
+    assessed as preferred to any other document, a ValueError is raised.'''
+    if bad_doc in self.preferred:
+      raise ValueError('Doc %s can not be both preferred & bad' % bad_doc)
+    self.bad_docs.add(bad_doc)
+
   def add_edge(self, from_vertex, to_vertex, weight = 1):
     '''Generic method to add an edge in the preference graph.
 
-    If from_vertex or to_vertex == 'na', then the other vertex is added as a
-    BAD document.
-
     ValueError is raised if an edge is added where the preferred document has
-    previously been added as BAD, or if a BAD document is added that has been
-    previously preferred.'''
-    if from_vertex.lower() == 'na':
-      if to_vertex in self.preferred_docs:
-        raise ValueError('Doc %s can not be both preferred & bad' % to_vertex)
-      self.bad_docs.add(to_vertex)
-
-    elif to_vertex.lower() == 'na':
-      if from_vertex in self.preferred:
-        raise ValueError('Doc %s can not be both preferred & bad' % from_vertex)
-      self.bad_docs.add(from_vertex)
-
-    else:
-      if from_vertex in self.bad_docs:
-        raise ValueError('Doc %s can not be both preferred & bad' % from_vertex)
-      self.edges.add( (from_vertex, to_vertex, weight) )
+    previously been added as BAD.'''
+    if from_vertex in self.bad_docs:
+      raise ValueError('Doc %s can not be both preferred & bad' % from_vertex)
+    self.edges.add( (from_vertex, to_vertex, weight) )
 
   def all_path_lengths(self):
     '''Floyd-Warshall algorithm to find the distance of all minimum-length paths between any two vetices. Returns a dictionary such that d[(i, j)] is the shortest path between nodes i and j. If no such path exists, this key won't be present in the dictionary. This algorithm runs in O(|V|**3).
@@ -111,12 +103,24 @@ def read_pref_file(filename):
     qid, from_doc, to_doc, pref = line.lower().strip().split()
     pref = int(pref)
     try:
-      if pref < 0:
+      if pref == -1:
         preferences[qid].add_edge(from_doc, to_doc, 1)
-      elif pref > 0:
+      elif pref == 1:
         preferences[qid].add_edge(to_doc, from_doc, 1)
-      else:
+      elif pref == 0:
+        # if duplicates, add a zero-weight edge in both directions
         preferences[qid].add_edge(from_doc, to_doc, 0)
+        preferences[qid].add_edge(to_doc, from_doc, 0)
+      elif pref == -2:
+        if to_doc.lower() != 'na':
+          raise ValueError('OTHER doc in bad judgements must be "NA"')
+        preferences[qid].add_bad_doc(from_doc)
+      elif pref == 2:
+        if from_doc.lower() != 'na':
+          raise ValueError('OTHER doc in bad judgements must be "NA"')
+        preferences[qid].add_bad_doc(to_doc)
+      else:
+        raise ValueError('Can\'t understand preference: %d' % pref)
     except ValueError, e:
       print >> sys.stderr, e
   return preferences
