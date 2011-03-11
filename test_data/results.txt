@@ -1,0 +1,8 @@
+0 Q0 10 1 101 test
+0 Q0 1 1 100 test
+0 Q0 2 2 99 test
+0 Q0 3 3 98 test
+0 Q0 4 4 97 test
+0 Q0 5 5 96 test
+0 Q0 6 6 95 test
+0 Q0 7 7 94 test
