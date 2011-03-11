@@ -52,12 +52,12 @@ class PreferenceGraph(object):
     ValueError is raised if an edge is added where the preferred document has
     previously been added as BAD, or if a BAD document is added that has been
     previously preferred.'''
-    if from_vertex == 'na':
+    if from_vertex.lower() == 'na':
       if to_vertex in self.preferred_docs:
         raise ValueError('Doc %s can not be both preferred & bad' % to_vertex)
       self.bad_docs.add(to_vertex)
 
-    elif to_vertex == 'na':
+    elif to_vertex.lower() == 'na':
       if from_vertex in self.preferred:
         raise ValueError('Doc %s can not be both preferred & bad' % from_vertex)
       self.bad_docs.add(from_vertex)
