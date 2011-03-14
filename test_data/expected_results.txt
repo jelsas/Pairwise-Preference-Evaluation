@@ -1,0 +1,30 @@
+Query: 0
+Edges:
+  1 -> 5 (1.00)
+  1 -> 3 (1.00)
+  10 -> 1 (1.00)
+  4 -> 3 (1.00)
+  1 -> 2 (1.00)
+BadDocs:
+  
+num_q           	all	1
+mnum_preference  	all	8.0000
+mnum_preferred   	all	3.0000
+mnum_bad         	all	0.0000
+mrrpref          	all	1.0000
+mppref1          	all	1.0000
+mppref5          	all	0.8750
+mppref10         	all	0.8750
+mrpref1          	all	0.5000
+mrpref5          	all	0.8750
+mrpref10         	all	0.8750
+mfpref1          	all	0.6667
+mfpref5          	all	0.8750
+mfpref10         	all	0.8750
+mwpref1          	all	4.0000
+mwpref5          	all	5.5000
+mwpref10         	all	5.5000
+mnwpref1         	all	1.0000
+mnwpref5         	all	0.9429
+mnwpref10        	all	0.9429
+mAPpref          	all	1.0000
