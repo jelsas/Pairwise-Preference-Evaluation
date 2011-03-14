@@ -11,9 +11,7 @@ from __future__ import division
 from collections import defaultdict
 from itertools import groupby, izip
 from operator import itemgetter
-from optparse import OptionParser
 from math import log
-import sys
 
 class PreferenceGraph(object):
   '''A class that encapsulates all the relevance preference information for a
@@ -38,7 +36,7 @@ class PreferenceGraph(object):
     return set(e[0] for e in self.edges)
 
   def __str__(self):
-    edges_str = '\n  '.join( '%s -> %s (%0.4f)' % e for e in self.edges )
+    edges_str = '\n  '.join( '%s -> %s (%0.2f)' % e for e in self.edges )
     bad_docs_str = '\n  '.join( self.bad_docs )
 
     return 'Edges:\n  %s\nBadDocs:\n  %s' % (edges_str, bad_docs_str)
@@ -51,21 +49,26 @@ class PreferenceGraph(object):
     self.bad_docs.add(bad_doc)
 
   def add_edge(self, from_vertex, to_vertex, weight = 1):
-    '''Generic method to add an edge in the preference graph.
-
-    ValueError is raised if an edge is added where the preferred document has
-    previously been added as BAD.'''
+    '''Adds an edge in the preference graph. ValueError is raised if an edge is
+    added where the preferred document has previously been added as BAD.'''
     if from_vertex in self.bad_docs:
       raise ValueError('Doc %s can not be both preferred & bad' % from_vertex)
     self.edges.add( (from_vertex, to_vertex, weight) )
 
-  def all_path_lengths(self):
+  def all_path_lengths(self, transitive=True):
     '''Floyd-Warshall algorithm to find the distance of all minimum-length paths between any two vetices. Returns a dictionary such that d[(i, j)] is the shortest path between nodes i and j. If no such path exists, this key won't be present in the dictionary. This algorithm runs in O(|V|**3).
+
+    If transitive=False, only explicit preferences are assumed, and the F-W
+    algorithm is not run.
 
     Note: BAD documents are not included.'''
     d = dict()
     for (f, t, w) in self.edges:
       d[(f, t)] = w
+
+    if not transitive:
+      return d
+
     vertices = self.vertices
     for k in vertices:
       for i in vertices:
@@ -84,25 +87,29 @@ class PreferenceGraph(object):
             d[(i, j)] = min(d_i_j, d_i_k + d_k_j) if d_i_j else d_i_k + d_k_j
     return d
 
-def read_pref_file(filename):
-  '''Reads a preference file and returns a dict of qid -> PreferenceGraph.
+  @classmethod
+  def read_pref_file(cls, filename):
+    '''Reads a preference file and returns a dict of qid -> PreferenceGraph.
 
-  File should be in the format:
-    [qid] [doc1] [doc2] [preference]
-  where the [preference] value indicates which document is preferred or BAD.
-  The format is described in the above citation. Briefly:
+    File should be in the format:
+      [qid] [doc1] [doc2] [preference]
+    where the [preference] value indicates which document is preferred or BAD.
+    The format is described in the above citation. Briefly:
 
-  [preference] ==  2: doc2 = BAD, doc1 must be "NA"
-               == -2: doc1 = BAD, doc2 must be "NA"
-               ==  1: doc2 preferred to doc1
-               == -1: doc1 preferred to doc2
-               ==  0: doc1 and doc2 duplicates.
-  '''
-  preferences = defaultdict(PreferenceGraph)
-  for line in open(filename):
-    qid, from_doc, to_doc, pref = line.lower().strip().split()
-    pref = int(pref)
-    try:
+    [preference] ==  2: doc2 = BAD, doc1 must be "NA"
+                 == -2: doc1 = BAD, doc2 must be "NA"
+                 ==  1: doc2 preferred to doc1
+                 == -1: doc1 preferred to doc2
+                 ==  0: doc1 and doc2 duplicates.
+    '''
+    preferences = defaultdict(cls)
+    for line in open(filename):
+      try:
+        qid, from_doc, to_doc, pref = line.lower().strip().split()
+      except ValueError, e:
+        raise ValueError('Can\'t parse line: \'%s\', %s' % \
+            (line.strip(), str(e)))
+      pref = int(pref)
       if pref == -1:
         preferences[qid].add_edge(from_doc, to_doc, 1)
       elif pref == 1:
@@ -121,21 +128,7 @@ def read_pref_file(filename):
         preferences[qid].add_bad_doc(to_doc)
       else:
         raise ValueError('Can\'t understand preference: %d' % pref)
-    except ValueError, e:
-      print >> sys.stderr, e
-  return preferences
-
-def read_results_file(filename):
-  '''Reads a TREC format results file. This function is a generator yielding
-  the tuples (qid, [list of docs in rank order]).'''
-  def parse_line(line):
-    qid, _, docname, _, score, _ = line.lower().strip().split(None, 5)
-    return (qid, docname, float(score))
-
-  input = (parse_line(line) for line in open(filename))
-  for (q, q_data) in groupby(input, itemgetter(0)):
-    q_data = sorted(q_data, key=itemgetter(2), reverse=True)
-    yield (q, [d for (q, d, s) in q_data])
+    return preferences
 
 
 ######### THE FOLLOWING FUNCTIONS ARE THE EVALUATION MEASURES ###########
@@ -248,7 +241,7 @@ def appref(pref_ranks, bad_docs_ranks, bad_docs_count_unranked,
   #print rprefs
   # average ppref across ranks where rpref changes.
   rpref_change_ranks = [1] + [rprefs[i][0] for i in xrange(1,len(rprefs)) \
-                              if rprefs[i][1] > rprefs[i-1][1]]
+                              if rprefs[i][1] != rprefs[i-1][1]]
   #print rpref_change_ranks
   pprefs = [ ppref(i)(pref_ranks, bad_docs_ranks, bad_docs_count_unranked,
            preferred_ranks, preferred_count_unranked) \
@@ -303,15 +296,30 @@ def rrpref(pref_ranks, bad_docs_ranks, bad_docs_count_unranked,
 
 ######### MAIN: #########################
 if __name__=='__main__':
+  from optparse import OptionParser
+  import sys
+
   parser = OptionParser(usage='usage: %prog [options] pref_file results_file')
   parser.add_option('-q', action='store_true', dest='per_q',
                     help='print per-query statistics')
   parser.add_option('-v', action='store_true', dest='verbose',
                     help='print lots of debugging info')
+  parser.add_option('-i', action='store_true', dest='intransitive',
+                    default=False,
+                    help='Do not assume transitive preferences')
   (options, args) = parser.parse_args()
-  prefs_file, results_file = args
 
-  prefs = read_pref_file(prefs_file)
+  try:
+    prefs_file, results_file = args
+  except ValueError, e:
+    parser.error(e)
+
+  try:
+    prefs = PreferenceGraph.read_pref_file(prefs_file)
+  except ValueError, e:
+    parser.error('Error parsing pref_file \'%s\'\n%s' % (prefs_file, str(e)))
+  except IOError, e:
+    parser.error('Error reading pref_file \'%s\'\n%s' % (prefs_file, str(e)))
 
   # All the evaluation measures we calculate.
   # A sequence of tuples (name, function, format)
@@ -337,8 +345,23 @@ if __name__=='__main__':
                     ('nwpref10',       nwpref(10),      '%0.4f'),
                     ('APpref' ,        appref,          '%0.4f'),
                   )
-
   label_len = max(len(x[0]) for x in eval_measures)+2
+
+  def read_results_file(filename):
+    '''Reads a TREC format results file. This function is a generator yielding
+    the tuples (qid, [list of docs in rank order]).'''
+    def parse_line(line):
+      try:
+        qid, _, docname, _, score, _ = line.lower().strip().split(None, 5)
+      except ValueError, e:
+        parser.error('Error parsing results_file %s\nCan\'t parse line: \'%s\', %s' % \
+            (filename, line.strip(), str(e)))
+      return (qid, docname, float(score))
+
+    input = (parse_line(line) for line in open(filename))
+    for (q, q_data) in groupby(input, itemgetter(0)):
+      q_data = sorted(q_data, key=itemgetter(2), reverse=True)
+      yield (q, [d for (q, d, s) in q_data])
 
   summary_measures = defaultdict(float)
   num_q = 0
@@ -351,7 +374,7 @@ if __name__=='__main__':
       if options.verbose: print 'skipping q', q, 'no edges'
       continue
     num_q += 1
-    trans_prefs = q_prefs.all_path_lengths()
+    trans_prefs = q_prefs.all_path_lengths(transitive=not options.intransitive)
     # map preferences & bad docs to ranks instead of docids
     doc_rank = dict( (doc, i+1) for (i, doc) in enumerate(docs) )
     pref_ranks = [ \
@@ -374,8 +397,6 @@ if __name__=='__main__':
       if options.per_q:
         print '%s\t%s\t%s' % (eval_name.ljust(label_len), q, fmt % m)
       summary_measures[eval_name] += m
-
-
 
   print '%s\tall\t%d' % ('num_q'.ljust(label_len), num_q)
   if num_q > 0:
