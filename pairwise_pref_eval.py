@@ -45,15 +45,19 @@ class PreferenceGraph(object):
     '''Adds a document to the set of BAD docs. If the document has already been
     assessed as preferred to any other document, a ValueError is raised.'''
     if bad_doc in self.preferred:
-      raise ValueError('Doc %s can not be both preferred & bad' % bad_doc)
-    self.bad_docs.add(bad_doc)
+      pass
+      #raise ValueError('Doc %s can not be both preferred & bad' % bad_doc)
+    else:
+      self.bad_docs.add(bad_doc)
 
   def add_edge(self, from_vertex, to_vertex, weight = 1):
     '''Adds an edge in the preference graph. ValueError is raised if an edge is
     added where the preferred document has previously been added as BAD.'''
     if from_vertex in self.bad_docs:
-      raise ValueError('Doc %s can not be both preferred & bad' % from_vertex)
-    self.edges.add( (from_vertex, to_vertex, weight) )
+      pass
+      #raise ValueError('Doc %s can not be both preferred & bad' % from_vertex)
+    else:
+      self.edges.add( (from_vertex, to_vertex, weight) )
 
   def all_path_lengths(self, transitive=True):
     '''Floyd-Warshall algorithm to find the distance of all minimum-length paths between any two vetices. Returns a dictionary such that d[(i, j)] is the shortest path between nodes i and j. If no such path exists, this key won't be present in the dictionary. This algorithm runs in O(|V|**3).
@@ -130,15 +134,90 @@ class PreferenceGraph(object):
         raise ValueError('Can\'t understand preference: %d' % pref)
     return preferences
 
+class ResultPreferences(object):
+  '''Encapsulates all the preference data associated with retrieval results.
+  This class handles mapping document ids's in the PreferenceGraph to document
+  ranks.'''
+  def __init__(self, ordered_docs, pref_graph, transitive=True):
+    all_prefs = q_prefs.all_path_lengths(transitive=transitive)
+    doc_rank = dict( (doc, i+1) for (i, doc) in enumerate(ordered_docs) )
+
+    # the preferences (f, t, w) for those documents (f, t) both ranked where
+    # (f, t) are ranks, (w) is a weight
+    self.pref_ranks = [ \
+          (doc_rank.get(f), doc_rank.get(t), w) \
+                          for ( (f, t), w) in all_prefs.iteritems() \
+                          if f in doc_rank and t in doc_rank]
+
+    # the ranks of judged bad documents
+    self.bad_docs_ranks = sorted(doc_rank[d] for d in q_prefs.bad_docs \
+                            if d in doc_rank)
+
+    # the count of unranked bad documents
+    self.bad_docs_count_unranked = len(q_prefs.bad_docs) - \
+                                    len(self.bad_docs_ranks)
+
+    preferred = pref_graph.preferred
+
+    # the ranks of all documents ever preferred to another document
+    self.preferred_ranks = sorted( doc_rank[d] for d in preferred \
+                                if d in doc_rank )
+
+    # the count of preferred documents not retrieved
+    self.preferred_count_unranked = len(preferred) - len(self.preferred_ranks)
+
+  def __str__(self):
+    ranks = set.union(*[set([f, t]) for (f, t, w) in self.pref_ranks] + [set()])
+    ranks = sorted(ranks | set(self.bad_docs_ranks))
+    if len(ranks) == 0:
+      return 'NA'
+    preferred_to_non = set( (f, t) for (f, t, w) in self.pref_ranks if w > 0)
+    dups = set( (f, t) for (f, t, w) in self.pref_ranks if w == 0)
+    # build a matrix M of rank x rank w/ each cell >, <, =, B
+    m = []
+    for (i, ri) in enumerate(ranks):
+      if ri in self.bad_docs_ranks:
+        r = ['B'] * len(ranks)
+        r[i] = '#'
+        m.append( r )
+      else:
+        r = []
+        for rj in ranks:
+          if ri == rj:
+            r.append('#')
+          elif rj in self.bad_docs_ranks:
+            r.append('B')
+          elif (ri, rj) in preferred_to_non:
+            r.append('>')
+          elif (rj, ri) in preferred_to_non:
+            r.append('<')
+          elif (ri, rj) in dups or (rj, ri) in dups:
+            r.append('=')
+          else:
+            r.append(' ')
+        m.append(r)
+    headers = [str(x) for x in ranks ]
+    cell_widths = [len(x)+1 for x in headers]
+    s = ' '*max(cell_widths) + \
+                ''.join(x.ljust(w) for (x, w) in izip(headers, cell_widths))
+    for i in xrange(len(headers)):
+      r = ranks[i]
+      h = headers[i]
+      si = '%s%s' % (h.ljust(max(cell_widths)),
+                    ''.join(x.ljust(w) for (x, w) in izip(m[i], cell_widths)))
+      s = '\n'.join((s, si))
+    return s
 
 ######### THE FOLLOWING FUNCTIONS ARE THE EVALUATION MEASURES ###########
 
-def count_incorrect(preferred, bad, rank = -1):
-  '''Counts the incorrect pairs among the list of bad & preferred ranks. 'preferred' and 'bad' must be in sorted order.'''
+def count_incorrect(rank_prefs, rank = -1):
+  '''Counts the incorrect pairs among the list of bad & preferred ranks.'''
   pi, bi, count = 0, 0, 0
-  if rank < 0: rank = max(preferred)
-  while pi < len(preferred) and preferred[pi] <= rank:
-    while bi < len(bad) and bad[bi] <= preferred[pi]:
+  if rank < 0: rank = max(rank_prefs.preferred_ranks)
+  while pi < len(rank_prefs.preferred_ranks) \
+          and rank_prefs.preferred_ranks[pi] <= rank:
+    while bi < len(rank_prefs.bad_docs_ranks) \
+          and rank_prefs.bad_docs_ranks[bi] <= rank_prefs.preferred_ranks[pi]:
       bi += 1
     count += bi
     pi += 1
@@ -148,136 +227,115 @@ def num_pref(k):
   '''Returns a function to count the number of judged preferences present in the top k ranked documents. If k < 0, counts judged preferences in all retrieved
   documents. '''
   if k < 0:
-    def f(pref_ranks, bad_docs_ranks, bad_docs_count_unranked,
-          preferred_ranks, preferred_count_unranked):
-      n_bad = len(bad_docs_ranks) + bad_docs_count_unranked
-      n_preferred = len(preferred_ranks) + preferred_count_unranked
-      return len(pref_ranks) + n_bad * n_preferred
+    def f(rank_prefs):
+      n_bad = len(rank_prefs.bad_docs_ranks) + \
+                rank_prefs.bad_docs_count_unranked
+      n_preferred = len(rank_prefs.preferred_ranks) + \
+                      rank_prefs.preferred_count_unranked
+      return len(rank_prefs.pref_ranks) + n_bad * n_preferred
     return f
   else:
-    def f(pref_ranks, bad_docs_ranks, bad_docs_count_unranked,
-          preferred_ranks, preferred_count_unranked):
-      n_prefs_above_k = sum(1 for (f, t, w) in pref_ranks if \
+    def f(rank_prefs):
+      n_prefs_above_k = sum(1 for (f, t, w) in rank_prefs.pref_ranks if \
                             (f <= k or t <= k) and w > 0)
-      n_preferred_above_k = sum(1 for i in preferred_ranks if i <= k)
-      n_bad = len(bad_docs_ranks) + bad_docs_count_unranked
+      n_preferred_above_k = sum(1 for i in rank_prefs.preferred_ranks if i <= k)
+      n_bad = len(rank_prefs.bad_docs_ranks) + \
+                rank_prefs.bad_docs_count_unranked
       return n_prefs_above_k + n_preferred_above_k * n_bad
     return f
 
 def num_pref_correct(k):
   '''Returns a function to count the number of judged preferences correctly
   ordered present in the top k ranked documents.'''
-  def f(pref_ranks, bad_docs_ranks, bad_docs_count_unranked,
-          preferred_ranks, preferred_count_unranked):
+  def f(rank_prefs):
     # total prefs @ k
-    n_prefs = num_pref(k)(pref_ranks, bad_docs_ranks, bad_docs_count_unranked,
-                          preferred_ranks, preferred_count_unranked)
+    n_prefs = num_pref(k)(rank_prefs)
     # incorrect from expressed preferences
-    n_incorrect = sum(int(f > t) for (f, t, w) in pref_ranks \
+    n_incorrect = sum(int(f > t) for (f, t, w) in rank_prefs.pref_ranks \
                       if w > 0 and (t <= k or f <= k))
     # incorrect from preferred/bad judgements
-    n_incorrect += count_incorrect(preferred_ranks, bad_docs_ranks, k)
+    n_incorrect += count_incorrect(rank_prefs, k)
     return n_prefs - n_incorrect
   return f
 
-def num_preferred(pref_ranks, bad_docs_ranks, bad_docs_count_unranked,
-          preferred_ranks, preferred_count_unranked):
-  return len(preferred_ranks) + preferred_count_unranked
+def num_preferred(rank_prefs):
+  return len(rank_prefs.preferred_ranks) + rank_prefs.preferred_count_unranked
 
-def num_bad(pref_ranks, bad_docs_ranks, bad_docs_count_unranked,
-          preferred_ranks, preferred_count_unranked):
-  return len(bad_docs_ranks) + bad_docs_count_unranked
+def num_bad(rank_prefs):
+  return len(rank_prefs.bad_docs_ranks) + rank_prefs.bad_docs_count_unranked
 
 def ppref(k):
   '''Returns function calculating ppref at the given cutoff (k)'''
-  def f(pref_ranks, bad_docs_ranks, bad_docs_count_unranked,
-          preferred_ranks, preferred_count_unranked):
+  def f(rank_prefs):
     # total prefs @ k
-    n_prefs = num_pref(k)(pref_ranks, bad_docs_ranks, bad_docs_count_unranked,
-                          preferred_ranks, preferred_count_unranked)
+    n_prefs = num_pref(k)(rank_prefs)
     if n_prefs == 0: return 0
-    n_prefs_correct = num_pref_correct(k)(pref_ranks, bad_docs_ranks,
-            bad_docs_count_unranked, preferred_ranks, preferred_count_unranked)
-
+    n_prefs_correct = num_pref_correct(k)(rank_prefs)
     precision = n_prefs_correct / n_prefs
     return precision
   return f
 
 def rpref(k):
   '''Returns function calculating rpref at the given cutoff (k)'''
-  def f(pref_ranks, bad_docs_ranks, bad_docs_count_unranked,
-          preferred_ranks, preferred_count_unranked):
+  def f(rank_prefs):
     # total prefs anywhere
-    n_prefs = num_pref(-1)(pref_ranks, bad_docs_ranks, bad_docs_count_unranked,
-                          preferred_ranks, preferred_count_unranked)
+    n_prefs = num_pref(-1)(rank_prefs)
     if n_prefs == 0: return 0
-    n_prefs_correct = num_pref_correct(k)(pref_ranks, bad_docs_ranks,
-            bad_docs_count_unranked, preferred_ranks, preferred_count_unranked)
+    n_prefs_correct = num_pref_correct(k)(rank_prefs)
     recall = n_prefs_correct / n_prefs
     return recall
   return f
 
 def fpref(k, beta = 1):
   '''Returns function calculating rpref/ppref F measure at the given cutoff'''
-  def f(pref_ranks, bad_docs_ranks, bad_docs_count_unranked,
-          preferred_ranks, preferred_count_unranked):
-    ppref_k = ppref(k)(pref_ranks, bad_docs_ranks, bad_docs_count_unranked,
-                          preferred_ranks, preferred_count_unranked)
-    rpref_k = rpref(k)(pref_ranks, bad_docs_ranks, bad_docs_count_unranked,
-                          preferred_ranks, preferred_count_unranked)
+  def f(rank_prefs):
+    ppref_k = ppref(k)(rank_prefs)
+    rpref_k = rpref(k)(rank_prefs)
     if ppref_k == 0 and rpref_k == 0:
       return 0
     return (1 + beta**2) * (ppref_k * rpref_k) / (beta**2 * ppref_k + rpref_k)
   return f
 
-def appref(pref_ranks, bad_docs_ranks, bad_docs_count_unranked,
-           preferred_ranks, preferred_count_unranked):
+def appref(rank_prefs):
   # list of (rpref, rank), making sure we include the first rank
   # rpref can only change when we encounter a ranked preferred doc
-  if len(preferred_ranks) == 0 or preferred_ranks[0] != 1:
-    preferred_ranks = [1] + preferred_ranks
-  rprefs = [(i, rpref(i)(pref_ranks, bad_docs_ranks, bad_docs_count_unranked,
-           preferred_ranks, preferred_count_unranked)) for i in preferred_ranks]
+  if len(rank_prefs.preferred_ranks) == 0 or rank_prefs.preferred_ranks[0] != 1:
+    rank_prefs.preferred_ranks = [1] + rank_prefs.preferred_ranks
+  rprefs = [(i, rpref(i)(rank_prefs)) for i in rank_prefs.preferred_ranks]
   #print rprefs
   # average ppref across ranks where rpref changes.
   rpref_change_ranks = [1] + [rprefs[i][0] for i in xrange(1,len(rprefs)) \
                               if rprefs[i][1] != rprefs[i-1][1]]
   #print rpref_change_ranks
-  pprefs = [ ppref(i)(pref_ranks, bad_docs_ranks, bad_docs_count_unranked,
-           preferred_ranks, preferred_count_unranked) \
+  pprefs = [ ppref(i)(rank_prefs) \
               for i in rpref_change_ranks ]
   #print pprefs
   return sum(pprefs) / len(rpref_change_ranks)
 
 def wpref(k, w_func = None):
   '''returns a function for calculating wpref@k. assumes uniform preference degree (pref_ij == 1)'''
-  def f(pref_ranks, bad_docs_ranks, bad_docs_count_unranked,
-           preferred_ranks, preferred_count_unranked):
+  def f(rank_prefs):
     if w_func is None:
       weight = lambda f, t: 1.0 / (log(f, 2)+1) if f < t else 0.0
     else:
       weight = w_func
     # iterate through the pref_ranks & tally up the wpref values
-    wpref = sum(weight(f, t) for (f, t, w) in pref_ranks if \
+    wpref = sum(weight(f, t) for (f, t, w) in rank_prefs.pref_ranks if \
                           (f <= k or t <= k) and w > 0)
     # add the wpref for unranked BAD docs. assume bad docs are at rank k+1
-    wpref += sum(weight(f, k+1)*bad_docs_count_unranked \
-                for f in preferred_ranks)
+    wpref += sum(weight(f, k+1)*rank_prefs.bad_docs_count_unranked \
+                for f in rank_prefs.preferred_ranks)
     return wpref
   return f
 
 def nwpref(k):
-  def f(pref_ranks, bad_docs_ranks, bad_docs_count_unranked,
-           preferred_ranks, preferred_count_unranked):
-    unnorm = wpref(k)(pref_ranks, bad_docs_ranks, bad_docs_count_unranked,
-                      preferred_ranks, preferred_count_unranked)
+  def f(rank_prefs):
+    unnorm = wpref(k)(rank_prefs)
     # to normalize the wpref values, we create a weighting function that always
     # counts a document pair regardless of the correct ordering of the docs.
     # TODO: this doesn't really reflect a "perfect" ordering at rank k
     norm_weight = lambda f, t: 1.0 / (log(min(f, t), 2)+1)
-    norm = wpref(k, w_func = norm_weight)(pref_ranks, bad_docs_ranks,
-                 bad_docs_count_unranked, preferred_ranks,
-                 preferred_count_unranked)
+    norm = wpref(k, w_func = norm_weight)(rank_prefs)
     if norm == 0:
       assert unnorm == 0, 'wpref norm = 0, but wpref != 0'
       return 0
@@ -285,10 +343,9 @@ def nwpref(k):
       return unnorm/norm
   return f
 
-def rrpref(pref_ranks, bad_docs_ranks, bad_docs_count_unranked,
-           preferred_ranks, preferred_count_unranked):
+def rrpref(rank_prefs):
   '''Reciprocal Rank pref. 1/rank of first correctly ordered preferred doc.'''
-  correctly_ranked = [f for (f, t, w) in pref_ranks if w > 0 and f < t]
+  correctly_ranked = [f for (f, t, w) in rank_prefs.pref_ranks if w > 0 and f < t]
   if correctly_ranked:
     return 1.0 / min(correctly_ranked)
   else:
@@ -374,27 +431,14 @@ if __name__=='__main__':
       if options.verbose: print 'skipping q', q, 'no edges'
       continue
     num_q += 1
-    trans_prefs = q_prefs.all_path_lengths(transitive=not options.intransitive)
+    all_prefs = q_prefs.all_path_lengths(transitive=not options.intransitive)
     # map preferences & bad docs to ranks instead of docids
-    doc_rank = dict( (doc, i+1) for (i, doc) in enumerate(docs) )
-    pref_ranks = [ \
-          (doc_rank.get(f), doc_rank.get(t), w) \
-                          for ( (f, t), w) in trans_prefs.iteritems() \
-                          if f in doc_rank and t in doc_rank]
-
-    bad_docs_ranks = sorted(doc_rank[d] for d in q_prefs.bad_docs \
-                            if d in doc_rank)
-    bad_docs_count_unranked = len(q_prefs.bad_docs) - len(bad_docs_ranks)
-
-    preferred = set( f for ((f, t), w) in trans_prefs.iteritems() if w > 0 )
-    preferred_ranks = sorted( doc_rank[d] for d in preferred \
-                                if d in doc_rank )
-    preferred_count_unranked = len(preferred) - len(preferred_ranks)
+    r_pref = ResultPreferences(docs, q_prefs, not options.intransitive)
 
     for (eval_name, eval_f, fmt) in eval_measures:
-      m = eval_f(pref_ranks, bad_docs_ranks, bad_docs_count_unranked,
-                 preferred_ranks, preferred_count_unranked)
+      m = eval_f(r_pref)
       if options.per_q:
+        if options.verbose: print r_pref
         print '%s\t%s\t%s' % (eval_name.ljust(label_len), q, fmt % m)
       summary_measures[eval_name] += m
 
