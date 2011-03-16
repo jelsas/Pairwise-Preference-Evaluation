@@ -39,7 +39,6 @@ class PreferenceGraph(object):
   def __str__(self):
     edges_str = '\n  '.join( '%s -> %s (%0.2f)' % e for e in self.edges )
 
-
     if self.bad_docs:
       bad_docs_str = '\n  '.join( self.bad_docs )
       return 'Edges:\n  %s\nBadDocs:\n  %s' % (edges_str, bad_docs_str)
@@ -503,12 +502,10 @@ if __name__=='__main__':
     if options.verbose:
       print 'Query: %s' % q
       print q_prefs
-    if len(q_prefs.edges) == 0:
+    if len(q_prefs.edges) == 0 and len(q_prefs.bad_docs) == 0:
       if options.verbose: print 'skipping q', q, 'no edges'
       continue
     num_q += 1
-    all_prefs = q_prefs.all_path_lengths(transitive=not options.intransitive)
-    # map preferences & bad docs to ranks instead of docids
     r_pref = ResultPreferences(docs, q_prefs, not options.intransitive)
 
     if options.per_q and options.verbose: print r_pref
