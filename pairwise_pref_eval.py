@@ -369,19 +369,17 @@ def rpref_max(rank_prefs):
   return max(rpref(k)(rank_prefs) for k in rank_prefs.preferred_ranks)
 
 def wpref(k, w_func = None):
-  '''returns a function for calculating wpref@k. assumes uniform preference degree (pref_ij == 1)'''
+  '''returns a function for calculating wpref@k. assumes uniform preference degree
+  (pref_ij == 1)'''
   def f(rank_prefs):
     if w_func is None:
       weight = lambda f, t: 1.0 / (log(f, 2)+1) if f < t else 0.0
     else:
       weight = w_func
-    # iterate through the pref_ranks & tally up the wpref values
-    wpref = sum(weight(f, t) for (f, t) in rank_prefs.pref_ranks \
+    # iterate through the pref_ranks & tally up the wpref values. this includes
+    # bad documents
+    return sum(weight(f, t) for (f, t) in rank_prefs.pref_ranks \
                 if f <= k or t <= k)
-    # add the wpref for unranked BAD docs. assume bad docs are at rank k+1
-    wpref += sum(weight(f, k+1)*rank_prefs.count_bad_unranked \
-                for f in rank_prefs.preferred_ranks)
-    return wpref
   return f
 
 def nwpref(k):
