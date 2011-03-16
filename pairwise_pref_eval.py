@@ -259,9 +259,13 @@ def num_pref_correct(k):
   return f
 
 def num_preferred(rank_prefs):
+  '''Returns the number of documents that have ever been preferred to another
+  document, whether or not those documents were retrieved'''
   return len(rank_prefs.preferred_ranks) + rank_prefs.preferred_count_unranked
 
 def num_bad(rank_prefs):
+  '''Returns the number of documents judged bad, whether or not those documents
+  were retrieved'''
   return len(rank_prefs.bad_docs_ranks) + rank_prefs.bad_docs_count_unranked
 
 def ppref(k):
