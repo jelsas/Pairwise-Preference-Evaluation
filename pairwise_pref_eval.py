@@ -366,11 +366,17 @@ def appref(rank_prefs):
 
 def ppref_max(rank_prefs):
   '''Calculates the maximum ppref over all ranks'''
-  return max(ppref(k)(rank_prefs) for k in rank_prefs.preferred_ranks)
+  if rank_prefs.preferred_ranks:
+    return max(ppref(k)(rank_prefs) for k in rank_prefs.preferred_ranks)
+  else:
+    return 0.0
 
 def rpref_max(rank_prefs):
   '''Calculates the maximum rpref over all ranks'''
-  return max(rpref(k)(rank_prefs) for k in rank_prefs.preferred_ranks)
+  if rank_prefs.preferred_ranks:
+    return max(rpref(k)(rank_prefs) for k in rank_prefs.preferred_ranks)
+  else:
+    return 0.0
 
 def wpref(k, w_func = None):
   '''Returns a function for calculating wpref@k. assumes uniform preference degree
