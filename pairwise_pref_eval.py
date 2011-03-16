@@ -216,25 +216,18 @@ class ResultPreferences(object):
     # build a matrix M of rank x rank w/ each cell >, <, =, B
     m = []
     for (i, ri) in enumerate(ranks):
-      if ri in self.bad_docs_ranks:
-        r = ['B'] * len(ranks) # an entire row of BAD docs
-        r[i] = '#'             # diagonal == '#'
-        m.append( r )
-      else:
-        r = []
-        for rj in ranks:
-          if ri == rj:
-            r.append('#')      # diagonal == '#'
-          #elif rj in self.bad_docs_ranks:
-          #  r.append('B')      # bad column
-          elif (ri, rj) in preferred_to_non:
-            r.append('>')      # row preferred to column
-          elif (rj, ri) in preferred_to_non:
-            r.append('<')      # column preferred to row
-          elif (ri, rj) in self.duplicates or (rj, ri) in self.duplicates:
-            r.append('=')      # duplicates
-          else:
-            r.append(' ')      # no information
+      r = []
+      for rj in ranks:
+        if ri == rj:
+          r.append('#')      # diagonal == '#'
+        elif (ri, rj) in preferred_to_non:
+          r.append('>')      # row preferred to column
+        elif (rj, ri) in preferred_to_non:
+          r.append('<')      # column preferred to row
+        elif (ri, rj) in self.duplicates or (rj, ri) in self.duplicates:
+          r.append('=')      # duplicates
+        else:
+          r.append(' ')      # no information
         # add unranked info
         # cols: INF< INF> INF=
         inf_gt = sum(1 for (f, t) in self.pref_ranks \
@@ -440,10 +433,10 @@ if __name__=='__main__':
   # All the evaluation measures we calculate.
   # A sequence of tuples (name, function, format)
   eval_measures = (
-                    ('num_preferences',num_pref_ranked(-1),'%d'),
-                    ('num_pref_ranked',num_pref,           '%d'),
+                    ('num_pref_ranked',num_pref_ranked(-1),'%d'),
+                    ('num_pref_total', num_pref,           '%d'),
                     ('num_preferred',  num_preferred,      '%d'),
-                    ('num_pref_unrk',  num_preferred_unranked, '%d'),
+                    ('num_preferred_unrk',num_preferred_unranked,'%d'),
                     ('num_bad',        num_bad,            '%d'),
                     ('rrpref',         rrpref,             '%0.4f'),
                     ('ppref1',         ppref(1),           '%0.4f'),
