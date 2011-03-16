@@ -38,9 +38,13 @@ class PreferenceGraph(object):
 
   def __str__(self):
     edges_str = '\n  '.join( '%s -> %s (%0.2f)' % e for e in self.edges )
-    bad_docs_str = '\n  '.join( self.bad_docs )
 
-    return 'Edges:\n  %s\nBadDocs:\n  %s' % (edges_str, bad_docs_str)
+
+    if self.bad_docs:
+      bad_docs_str = '\n  '.join( self.bad_docs )
+      return 'Edges:\n  %s\nBadDocs:\n  %s' % (edges_str, bad_docs_str)
+    else:
+      return 'Edges:\n  %s' % edges_str
 
   def add_bad_doc(self, bad_doc):
     '''Adds a document to the set of BAD docs. If the document has already been
