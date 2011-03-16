@@ -312,6 +312,12 @@ def appref(rank_prefs):
   #print pprefs
   return sum(pprefs) / len(rpref_change_ranks)
 
+def ppref_max(rank_prefs):
+  return max(ppref(k)(rank_prefs) for k in rank_prefs.preferred_ranks)
+
+def rpref_max(rank_prefs):
+  return max(rpref(k)(rank_prefs) for k in rank_prefs.preferred_ranks)
+
 def wpref(k, w_func = None):
   '''returns a function for calculating wpref@k. assumes uniform preference degree (pref_ij == 1)'''
   def f(rank_prefs):
@@ -388,9 +394,15 @@ if __name__=='__main__':
                     ('ppref1',         ppref(1),        '%0.4f'),
                     ('ppref5',         ppref(5),        '%0.4f'),
                     ('ppref10',        ppref(10),       '%0.4f'),
+                    ('ppref25',        ppref(25),       '%0.4f'),
+                    ('ppref50',        ppref(50),       '%0.4f'),
+                    ('pprefMax',       ppref_max,       '%0.4f'),
                     ('rpref1',         rpref(1),        '%0.4f'),
                     ('rpref5',         rpref(5),        '%0.4f'),
                     ('rpref10',        rpref(10),       '%0.4f'),
+                    ('rpref25',        rpref(25),       '%0.4f'),
+                    ('rpref50',        rpref(50),       '%0.4f'),
+                    ('rprefMax',       rpref_max,       '%0.4f'),
                     ('fpref1',         fpref(1),        '%0.4f'),
                     ('fpref5',         fpref(5),        '%0.4f'),
                     ('fpref10',        fpref(10),       '%0.4f'),
@@ -435,10 +447,11 @@ if __name__=='__main__':
     # map preferences & bad docs to ranks instead of docids
     r_pref = ResultPreferences(docs, q_prefs, not options.intransitive)
 
+    if options.per_q and options.verbose: print r_pref
+
     for (eval_name, eval_f, fmt) in eval_measures:
       m = eval_f(r_pref)
       if options.per_q:
-        if options.verbose: print r_pref
         print '%s\t%s\t%s' % (eval_name.ljust(label_len), q, fmt % m)
       summary_measures[eval_name] += m
 
