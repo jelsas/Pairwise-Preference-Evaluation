@@ -6,7 +6,7 @@ Evaluation measures and file formats described in the following:
     http://research.microsoft.com/en-us/um/people/pauben/papers/sigir-2008-bbr-data-preference-overview.pdf
 
 
-pairwise_pref_eval.py [-q] [-v] PREFERENCES_FILE RESULTS_FILE
+pairwise_pref_eval.py [-q] [-v] [-i] PREFERENCES_FILE RESULTS_FILE
   Evaluates the results against the provided preferences.
   PREFERENCES_FILE should be in a 4-column format:
     QID  SOURCE_DOC  TARGET_DOC  PREFERENCE
