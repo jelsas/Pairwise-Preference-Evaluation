@@ -12,6 +12,7 @@ from collections import defaultdict
 from itertools import groupby, izip
 from operator import itemgetter
 from math import log
+import sys
 
 class PreferenceGraph(object):
   '''A class that encapsulates all the relevance preference information for a
@@ -138,141 +139,189 @@ class ResultPreferences(object):
   '''Encapsulates all the preference data associated with retrieval results.
   This class handles mapping document ids's in the PreferenceGraph to document
   ranks.'''
+
+  UNRANKED = sys.maxint
+
   def __init__(self, ordered_docs, pref_graph, transitive=True):
     all_prefs = q_prefs.all_path_lengths(transitive=transitive)
     doc_rank = dict( (doc, i+1) for (i, doc) in enumerate(ordered_docs) )
 
-    # the preferences (f, t, w) for those documents (f, t) both ranked where
-    # (f, t) are ranks, (w) is a weight
+    # the preferences (f, t, w) where (f, t) are ranks, (w) is a weight
+    # f or t can be UNRANKED if they aren't ranked
     self.pref_ranks = [ \
-          (doc_rank.get(f), doc_rank.get(t), w) \
-                          for ( (f, t), w) in all_prefs.iteritems() \
-                          if f in doc_rank and t in doc_rank]
+          (doc_rank.get(f, self.UNRANKED), doc_rank.get(t, self.UNRANKED)) \
+                          for ( (f, t), w) in all_prefs.iteritems() if w > 0]
+    self.count_preferred_unranked = len(set(f for ((f, t), w) \
+                                        in all_prefs.iteritems() \
+                                        if f not in doc_rank))
+    self.duplicates = [ \
+          (doc_rank.get(f, self.UNRANKED), doc_rank.get(t, self.UNRANKED)) \
+                          for ( (f, t), w) in all_prefs.iteritems() if w == 0]
 
-    # the ranks of judged bad documents
-    self.bad_docs_ranks = sorted(doc_rank[d] for d in q_prefs.bad_docs \
-                            if d in doc_rank)
+    # the ranks of judged bad documents. can be UNRANKED if they aren't ranked
+    self.bad_docs_ranks = sorted(doc_rank.get(d, self.UNRANKED) \
+                                for d in q_prefs.bad_docs)
+    self.count_bad_unranked = len(set(d for d in q_prefs.bad_docs \
+                                  if d not in doc_rank))
 
-    # the count of unranked bad documents
-    self.bad_docs_count_unranked = len(q_prefs.bad_docs) - \
-                                    len(self.bad_docs_ranks)
+    # generate preference pairs between all preferred docs & all bad docs
+    # ranks of preferred ranked docs
+    self.preferred_ranks = sorted(set(f for (f, t) in self.pref_ranks \
+                                if f != self.UNRANKED))
 
-    preferred = pref_graph.preferred
+    # add pairs of ranked preferred w/ unranked BAD
+    self.pref_ranks = self.pref_ranks + \
+        [(f, t) for f in self.preferred_ranks for t in self.bad_docs_ranks]
 
-    # the ranks of all documents ever preferred to another document
-    self.preferred_ranks = sorted( doc_rank[d] for d in preferred \
-                                if d in doc_rank )
+    # num. of pairs of preferred-bad docs that are both unranked
+    count_both_unranked = self.count_bad_unranked*self.count_preferred_unranked
 
-    # the count of preferred documents not retrieved
-    self.preferred_count_unranked = len(preferred) - len(self.preferred_ranks)
+    # add pairs of unranked preferred, unranked BAD
+    self.pref_ranks = self.pref_ranks + \
+        [(self.UNRANKED, self.UNRANKED)]*count_both_unranked
+
+  def preferred_docs_above(self, k):
+    '''Returns the rank of preferred documents ranked at k or above. If k < 0,
+    returns ranks of preferred documents ranked anywhere.'''
+    if k < 0:
+      return sorted(set(f for (f, t) in self.pref_ranks if f < self.UNRANKED))
+    else:
+      return sorted(set(f for (f, t) in self.pref_ranks if f <= k))
+
+  def bad_docs_above(self, k):
+    '''Returns the ranks of bad documents ranked above k. If k < 0, returns
+    the ranks of all bad documents retrieved.'''
+    if k < 0:
+      return [d for d in self.bad_docs_ranks if d < self.UNRANKED]
+    else:
+      return [d for d in self.bad_docs_ranks if d <= k]
+
+  def pref_pairs_above(self, k):
+    '''Returns the list of preference pairs where either document is above
+    or equal to rank k. If k < 0, returns all preference pairs where either
+    document is ranked.'''
+    if k < 0:
+      return [(f, t) for (f, t) in self.pref_ranks \
+                  if f < self.UNRANKED or t < self.UNRANKED]
+    else:
+      return [(f, t) for (f, t) in self.pref_ranks if f <= k or t <= k]
 
   def __str__(self):
-    ranks = set.union(*[set([f, t]) for (f, t, w) in self.pref_ranks] + [set()])
-    ranks = sorted(ranks | set(self.bad_docs_ranks))
-    if len(ranks) == 0:
-      return 'NA'
-    preferred_to_non = set( (f, t) for (f, t, w) in self.pref_ranks if w > 0)
-    dups = set( (f, t) for (f, t, w) in self.pref_ranks if w == 0)
+    ranks = set(f for (f, t) in self.pref_ranks) | \
+            set(t for (f, t) in self.pref_ranks)
+    if len(ranks) == 0: return 'NA'
+    if self.UNRANKED in ranks: ranks.remove(self.UNRANKED)
+    ranks = sorted(ranks)
+    preferred_to_non = set( self.pref_ranks )
     # build a matrix M of rank x rank w/ each cell >, <, =, B
     m = []
     for (i, ri) in enumerate(ranks):
       if ri in self.bad_docs_ranks:
-        r = ['B'] * len(ranks)
-        r[i] = '#'
+        r = ['B'] * len(ranks) # an entire row of BAD docs
+        r[i] = '#'             # diagonal == '#'
         m.append( r )
       else:
         r = []
         for rj in ranks:
           if ri == rj:
-            r.append('#')
-          elif rj in self.bad_docs_ranks:
-            r.append('B')
+            r.append('#')      # diagonal == '#'
+          #elif rj in self.bad_docs_ranks:
+          #  r.append('B')      # bad column
           elif (ri, rj) in preferred_to_non:
-            r.append('>')
+            r.append('>')      # row preferred to column
           elif (rj, ri) in preferred_to_non:
-            r.append('<')
-          elif (ri, rj) in dups or (rj, ri) in dups:
-            r.append('=')
+            r.append('<')      # column preferred to row
+          elif (ri, rj) in self.duplicates or (rj, ri) in self.duplicates:
+            r.append('=')      # duplicates
           else:
-            r.append(' ')
+            r.append(' ')      # no information
+        # add unranked info
+        # cols: INF< INF> INF=
+        inf_gt = sum(1 for (f, t) in self.pref_ranks \
+                            if f == ri and t == self.UNRANKED)
+        inf_lt = sum(1 for (f, t) in self.pref_ranks \
+                            if t == ri and f == self.UNRANKED)
+        inf_eq = sum(1 for (f, t) in self.duplicates \
+                            if (f == ri and t == self.UNRANKED) or \
+                               (t == ri and f == self.UNRANKED))
+        r = r + [str(inf_lt), str(inf_gt), str(inf_eq)]
         m.append(r)
-    headers = [str(x) for x in ranks ]
+    headers = [str(x) for x in ranks] + ['INF<', 'INF>', 'INF=']
     cell_widths = [len(x)+1 for x in headers]
     s = ' '*max(cell_widths) + \
                 ''.join(x.ljust(w) for (x, w) in izip(headers, cell_widths))
-    for i in xrange(len(headers)):
+    for i in xrange(len(headers[:-3])):
       r = ranks[i]
       h = headers[i]
       si = '%s%s' % (h.ljust(max(cell_widths)),
                     ''.join(x.ljust(w) for (x, w) in izip(m[i], cell_widths)))
       s = '\n'.join((s, si))
+    # add a row showing INF-INF preferences
+    inf_inf_prefs = sum(f == t == self.UNRANKED for (f, t) in self.pref_ranks)
+    s = '%s\n%s' % (s, 'INF<INF: %d'.rjust(sum(cell_widths)) % inf_inf_prefs)
     return s
 
 ######### THE FOLLOWING FUNCTIONS ARE THE EVALUATION MEASURES ###########
 
-def count_incorrect(rank_prefs, rank = -1):
-  '''Counts the incorrect pairs among the list of bad & preferred ranks.'''
-  pi, bi, count = 0, 0, 0
-  if rank < 0: rank = max(rank_prefs.preferred_ranks)
-  while pi < len(rank_prefs.preferred_ranks) \
-          and rank_prefs.preferred_ranks[pi] <= rank:
-    while bi < len(rank_prefs.bad_docs_ranks) \
-          and rank_prefs.bad_docs_ranks[bi] <= rank_prefs.preferred_ranks[pi]:
-      bi += 1
-    count += bi
-    pi += 1
-  return count
-
-def num_pref(k):
-  '''Returns a function to count the number of judged preferences present in the top k ranked documents. If k < 0, counts judged preferences in all retrieved
-  documents. '''
-  if k < 0:
-    def f(rank_prefs):
-      n_bad = len(rank_prefs.bad_docs_ranks) + \
-                rank_prefs.bad_docs_count_unranked
-      n_preferred = len(rank_prefs.preferred_ranks) + \
-                      rank_prefs.preferred_count_unranked
-      return len(rank_prefs.pref_ranks) + n_bad * n_preferred
-    return f
+def count_correct(rank_prefs, rank = -1):
+  '''Counts the number of correct pairs at or above rank. If rank < 0, counts
+  correct pairs retrieved at any rank.'''
+  if rank < 0:
+    return sum(1 for (f, t) in rank_prefs.pref_ranks \
+              if f < t and f < rank_prefs.UNRANKED)
   else:
-    def f(rank_prefs):
-      n_prefs_above_k = sum(1 for (f, t, w) in rank_prefs.pref_ranks if \
-                            (f <= k or t <= k) and w > 0)
-      n_preferred_above_k = sum(1 for i in rank_prefs.preferred_ranks if i <= k)
-      n_bad = len(rank_prefs.bad_docs_ranks) + \
-                rank_prefs.bad_docs_count_unranked
-      return n_prefs_above_k + n_preferred_above_k * n_bad
-    return f
+    return sum(1 for (f, t) in rank_prefs.pref_ranks if f < t and f <= rank)
+
+def count_incorrect(rank_prefs, rank = -1):
+  '''Counts the number of incorrect pairs at or above rank. If rank < 0, counts
+  incorrect pairs retrieved at any rank.'''
+  if rank < 0:
+    return sum(1 for (f, t) in rank_prefs.pref_ranks \
+              if f > t and t < rank_prefs.UNRANKED)
+  else:
+    return sum(1 for (f, t) in rank_prefs.pref_ranks if f > t and t <= rank)
+
+def num_preferred(rank_prefs):
+  '''Returns the number of documents that have ever been preferred to another
+  document, whether or not those documents were retrieved'''
+  return len(rank_prefs.preferred_docs_above(-1)) + \
+              rank_prefs.count_preferred_unranked
+
+def num_preferred_unranked(rank_prefs):
+  '''Returns the number of documents that have ever been preferred to another
+  document and were not retrieved'''
+  return rank_prefs.count_preferred_unranked
+
+def num_bad(rank_prefs):
+  '''Returns the number of documents judged bad, whether or not those documents
+  were retrieved'''
+  return len(rank_prefs.bad_docs_above(-1)) + \
+              rank_prefs.count_bad_unranked
+
+def num_pref(rank_prefs):
+  return len(rank_prefs.pref_ranks)
+
+def num_pref_ranked(k):
+  '''Returns a function to count the number of judged preferences where either
+  document is present in the top k ranked documents. If k < 0, counts judged
+  preferences in all retrieved documents. Includes implied preference between
+  preferred & bad documents'''
+  def f(rank_prefs):
+    return len(rank_prefs.pref_pairs_above(k))
+  return f
 
 def num_pref_correct(k):
   '''Returns a function to count the number of judged preferences correctly
   ordered present in the top k ranked documents.'''
   def f(rank_prefs):
-    # total prefs @ k
-    n_prefs = num_pref(k)(rank_prefs)
-    # incorrect from expressed preferences
-    n_incorrect = sum(int(f > t) for (f, t, w) in rank_prefs.pref_ranks \
-                      if w > 0 and (t <= k or f <= k))
-    # incorrect from preferred/bad judgements
-    n_incorrect += count_incorrect(rank_prefs, k)
-    return n_prefs - n_incorrect
+    return count_correct(rank_prefs, k)
   return f
-
-def num_preferred(rank_prefs):
-  '''Returns the number of documents that have ever been preferred to another
-  document, whether or not those documents were retrieved'''
-  return len(rank_prefs.preferred_ranks) + rank_prefs.preferred_count_unranked
-
-def num_bad(rank_prefs):
-  '''Returns the number of documents judged bad, whether or not those documents
-  were retrieved'''
-  return len(rank_prefs.bad_docs_ranks) + rank_prefs.bad_docs_count_unranked
 
 def ppref(k):
   '''Returns function calculating ppref at the given cutoff (k)'''
   def f(rank_prefs):
     # total prefs @ k
-    n_prefs = num_pref(k)(rank_prefs)
+    n_prefs = num_pref_ranked(k)(rank_prefs)
     if n_prefs == 0: return 0
     n_prefs_correct = num_pref_correct(k)(rank_prefs)
     precision = n_prefs_correct / n_prefs
@@ -283,7 +332,7 @@ def rpref(k):
   '''Returns function calculating rpref at the given cutoff (k)'''
   def f(rank_prefs):
     # total prefs anywhere
-    n_prefs = num_pref(-1)(rank_prefs)
+    n_prefs = len(rank_prefs.pref_ranks)
     if n_prefs == 0: return 0
     n_prefs_correct = num_pref_correct(k)(rank_prefs)
     recall = n_prefs_correct / n_prefs
@@ -330,10 +379,10 @@ def wpref(k, w_func = None):
     else:
       weight = w_func
     # iterate through the pref_ranks & tally up the wpref values
-    wpref = sum(weight(f, t) for (f, t, w) in rank_prefs.pref_ranks if \
-                          (f <= k or t <= k) and w > 0)
+    wpref = sum(weight(f, t) for (f, t) in rank_prefs.pref_ranks \
+                if f <= k or t <= k)
     # add the wpref for unranked BAD docs. assume bad docs are at rank k+1
-    wpref += sum(weight(f, k+1)*rank_prefs.bad_docs_count_unranked \
+    wpref += sum(weight(f, k+1)*rank_prefs.count_bad_unranked \
                 for f in rank_prefs.preferred_ranks)
     return wpref
   return f
@@ -355,7 +404,7 @@ def nwpref(k):
 
 def rrpref(rank_prefs):
   '''Reciprocal Rank pref. 1/rank of first correctly ordered preferred doc.'''
-  correctly_ranked = [f for (f, t, w) in rank_prefs.pref_ranks if w > 0 and f < t]
+  correctly_ranked = [f for (f, t) in rank_prefs.pref_ranks if f < t]
   if correctly_ranked:
     return 1.0 / min(correctly_ranked)
   else:
@@ -391,32 +440,34 @@ if __name__=='__main__':
   # All the evaluation measures we calculate.
   # A sequence of tuples (name, function, format)
   eval_measures = (
-                    ('num_preference', num_pref(-1),    '%d'),
-                    ('num_preferred',  num_preferred,   '%d'),
-                    ('num_bad',        num_bad,         '%d'),
-                    ('rrpref',         rrpref,          '%0.4f'),
-                    ('ppref1',         ppref(1),        '%0.4f'),
-                    ('ppref5',         ppref(5),        '%0.4f'),
-                    ('ppref10',        ppref(10),       '%0.4f'),
-                    ('ppref25',        ppref(25),       '%0.4f'),
-                    ('ppref50',        ppref(50),       '%0.4f'),
-                    ('pprefMax',       ppref_max,       '%0.4f'),
-                    ('rpref1',         rpref(1),        '%0.4f'),
-                    ('rpref5',         rpref(5),        '%0.4f'),
-                    ('rpref10',        rpref(10),       '%0.4f'),
-                    ('rpref25',        rpref(25),       '%0.4f'),
-                    ('rpref50',        rpref(50),       '%0.4f'),
-                    ('rprefMax',       rpref_max,       '%0.4f'),
-                    ('fpref1',         fpref(1),        '%0.4f'),
-                    ('fpref5',         fpref(5),        '%0.4f'),
-                    ('fpref10',        fpref(10),       '%0.4f'),
-                    ('wpref1',         wpref(1),        '%0.4f'),
-                    ('wpref5',         wpref(5),        '%0.4f'),
-                    ('wpref10',        wpref(10),       '%0.4f'),
-                    ('nwpref1',        nwpref(1),       '%0.4f'),
-                    ('nwpref5',        nwpref(5),       '%0.4f'),
-                    ('nwpref10',       nwpref(10),      '%0.4f'),
-                    ('APpref' ,        appref,          '%0.4f'),
+                    ('num_preferences',num_pref_ranked(-1),'%d'),
+                    ('num_pref_ranked',num_pref,           '%d'),
+                    ('num_preferred',  num_preferred,      '%d'),
+                    ('num_pref_unrk',  num_preferred_unranked, '%d'),
+                    ('num_bad',        num_bad,            '%d'),
+                    ('rrpref',         rrpref,             '%0.4f'),
+                    ('ppref1',         ppref(1),           '%0.4f'),
+                    ('ppref5',         ppref(5),           '%0.4f'),
+                    ('ppref10',        ppref(10),          '%0.4f'),
+                    ('ppref25',        ppref(25),          '%0.4f'),
+                    ('ppref50',        ppref(50),          '%0.4f'),
+                    ('pprefMax',       ppref_max,          '%0.4f'),
+                    ('rpref1',         rpref(1),           '%0.4f'),
+                    ('rpref5',         rpref(5),           '%0.4f'),
+                    ('rpref10',        rpref(10),          '%0.4f'),
+                    ('rpref25',        rpref(25),          '%0.4f'),
+                    ('rpref50',        rpref(50),          '%0.4f'),
+                    ('rprefMax',       rpref_max,          '%0.4f'),
+                    ('fpref1',         fpref(1),           '%0.4f'),
+                    ('fpref5',         fpref(5),           '%0.4f'),
+                    ('fpref10',        fpref(10),          '%0.4f'),
+                    ('wpref1',         wpref(1),           '%0.4f'),
+                    ('wpref5',         wpref(5),           '%0.4f'),
+                    ('wpref10',        wpref(10),          '%0.4f'),
+                    ('nwpref1',        nwpref(1),          '%0.4f'),
+                    ('nwpref5',        nwpref(5),          '%0.4f'),
+                    ('nwpref10',       nwpref(10),         '%0.4f'),
+                    ('APpref' ,        appref,             '%0.4f'),
                   )
   label_len = max(len(x[0]) for x in eval_measures)+2
 
