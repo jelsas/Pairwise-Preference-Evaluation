@@ -26,6 +26,7 @@ pairwise_pref_eval.py [-q] [-v] PREFERENCES_FILE RESULTS_FILE
 
   -q -- produces per-query output
   -v -- produces (very, very) verbose output
+  -i -- do not assume preferences are transitive. Transitivity is assumed by default
 
 test_eval.sh
   Runs the evaluation script above on sample data, comparing the output to
