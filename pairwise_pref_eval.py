@@ -347,6 +347,8 @@ def fpref(k, beta = 1):
   return f
 
 def appref(rank_prefs):
+  '''Calculates the APpref, which is ppref@k averaged over the k's (ranks) where
+  rpref(k) != rpref(k-1).'''
   # list of (rpref, rank), making sure we include the first rank
   # rpref can only change when we encounter a ranked preferred doc
   if len(rank_prefs.preferred_ranks) == 0 or rank_prefs.preferred_ranks[0] != 1:
@@ -363,13 +365,15 @@ def appref(rank_prefs):
   return sum(pprefs) / len(rpref_change_ranks)
 
 def ppref_max(rank_prefs):
+  '''Calculates the maximum ppref over all ranks'''
   return max(ppref(k)(rank_prefs) for k in rank_prefs.preferred_ranks)
 
 def rpref_max(rank_prefs):
+  '''Calculates the maximum rpref over all ranks'''
   return max(rpref(k)(rank_prefs) for k in rank_prefs.preferred_ranks)
 
 def wpref(k, w_func = None):
-  '''returns a function for calculating wpref@k. assumes uniform preference degree
+  '''Returns a function for calculating wpref@k. assumes uniform preference degree
   (pref_ij == 1)'''
   def f(rank_prefs):
     if w_func is None:
@@ -383,6 +387,10 @@ def wpref(k, w_func = None):
   return f
 
 def nwpref(k):
+  '''Returns a function calculating normalized wpref@k. Normalization assumes a
+  perfect ranking -- i.e. every preference observed is correctly ranked.
+  TODO(jelsas): this is probably not the correct way to normalize, but works
+  for now'''
   def f(rank_prefs):
     unnorm = wpref(k)(rank_prefs)
     # to normalize the wpref values, we create a weighting function that always
