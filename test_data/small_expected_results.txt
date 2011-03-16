@@ -6,9 +6,15 @@ mrrpref          	all	1.0000
 mppref1          	all	1.0000
 mppref5          	all	0.8000
 mppref10         	all	0.8000
+mppref25         	all	0.8000
+mppref50         	all	0.8000
+mpprefMax        	all	1.0000
 mrpref1          	all	0.6000
 mrpref5          	all	0.8000
 mrpref10         	all	0.8000
+mrpref25         	all	0.8000
+mrpref50         	all	0.8000
+mrprefMax        	all	0.8000
 mfpref1          	all	0.7500
 mfpref5          	all	0.8000
 mfpref10         	all	0.8000
