@@ -1,0 +1,38 @@
+An evaluation tool for pairwise preference judgements.
+
+Evaluation measures and file formats described in the following:
+
+  B. Carterette, P.N. Bennett, O. Chapelle (2008). A Test Collection of Preference Judgments. In Proceedings of the SIGIR 2008 Beyond Binary Relevance: Preferences, Diversity, and Set-Level Judgments Workshop.   Singapore. July, 2008.
+    http://research.microsoft.com/en-us/um/people/pauben/papers/sigir-2008-bbr-data-preference-overview.pdf
+
+
+pairwise_pref_eval.py [-q] [-v] PREFERENCES_FILE RESULTS_FILE
+  Evaluates the results against the provided preferences.
+  PREFERENCES_FILE should be in a 4-column format:
+    QID  SOURCE_DOC  TARGET_DOC  PREFERENCE
+  Where
+    QID == query ID
+    SOURCE_DOC, TARGET_DOC are document identifiers
+    PREFERENCE (-2, -1, 0, 1, 2) indicates the preference value.
+    PREFERENCE == -2 -- indicates SOURCE_DOC is BAD, TARGET_DOC should be "NA"
+                  -1 -- indicates SOURCE_DOC preferred to TARGET_DOC
+                   0 -- indicates SOURCE_DOC and TARGET_DOC are duplicates
+                   1 -- indicates TARGET_DOC preferred to SOURCE_DOC
+                   2 -- indicates TARGET_DOC is BAD, SOURCE_DOC shoudl be "NA"
+  RESULTS_FILE is in the standard 5-column TREC format 
+    QID "Q0" DOC RANK SCORE [COMMENT+]
+  Note:
+    the "Q0", RANK & COMMENT columns are ignored
+
+  -q -- produces per-query output
+  -v -- produces (very, very) verbose output
+
+test_eval.sh
+  Runs the evaluation script above on sample data, comparing the output to
+  the expected output.
+
+test_data/
+  small_results small_preferences small_expected_results.txt 
+    - toy examples & expected results
+  results.txt preferences.txt expected_results.txt 
+    - more complicated examples & expected results
