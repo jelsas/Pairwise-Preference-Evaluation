@@ -216,36 +216,29 @@ class ResultPreferences(object):
     # build a matrix M of rank x rank w/ each cell >, <, =, B
     m = []
     for (i, ri) in enumerate(ranks):
-      if ri in self.bad_docs_ranks:
-        r = ['B'] * len(ranks) # an entire row of BAD docs
-        r[i] = '#'             # diagonal == '#'
-        m.append( r )
-      else:
-        r = []
-        for rj in ranks:
-          if ri == rj:
-            r.append('#')      # diagonal == '#'
-          #elif rj in self.bad_docs_ranks:
-          #  r.append('B')      # bad column
-          elif (ri, rj) in preferred_to_non:
-            r.append('>')      # row preferred to column
-          elif (rj, ri) in preferred_to_non:
-            r.append('<')      # column preferred to row
-          elif (ri, rj) in self.duplicates or (rj, ri) in self.duplicates:
-            r.append('=')      # duplicates
-          else:
-            r.append(' ')      # no information
-        # add unranked info
-        # cols: INF< INF> INF=
-        inf_gt = sum(1 for (f, t) in self.pref_ranks \
-                            if f == ri and t == self.UNRANKED)
-        inf_lt = sum(1 for (f, t) in self.pref_ranks \
-                            if t == ri and f == self.UNRANKED)
-        inf_eq = sum(1 for (f, t) in self.duplicates \
-                            if (f == ri and t == self.UNRANKED) or \
-                               (t == ri and f == self.UNRANKED))
-        r = r + [str(inf_lt), str(inf_gt), str(inf_eq)]
-        m.append(r)
+      r = []
+      for rj in ranks:
+        if ri == rj:
+          r.append('#')      # diagonal == '#'
+        elif (ri, rj) in preferred_to_non:
+          r.append('>')      # row preferred to column
+        elif (rj, ri) in preferred_to_non:
+          r.append('<')      # column preferred to row
+        elif (ri, rj) in self.duplicates or (rj, ri) in self.duplicates:
+          r.append('=')      # duplicates
+        else:
+          r.append(' ')      # no information
+      # add unranked info
+      # cols: INF< INF> INF=
+      inf_gt = sum(1 for (f, t) in self.pref_ranks \
+                          if f == ri and t == self.UNRANKED)
+      inf_lt = sum(1 for (f, t) in self.pref_ranks \
+                          if t == ri and f == self.UNRANKED)
+      inf_eq = sum(1 for (f, t) in self.duplicates \
+                          if (f == ri and t == self.UNRANKED) or \
+                             (t == ri and f == self.UNRANKED))
+      r = r + [str(inf_lt), str(inf_gt), str(inf_eq)]
+      m.append(r)
     headers = [str(x) for x in ranks] + ['INF<', 'INF>', 'INF=']
     cell_widths = [len(x)+1 for x in headers]
     s = ' '*max(cell_widths) + \
