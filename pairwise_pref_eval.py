@@ -346,22 +346,18 @@ def fpref(k, beta = 1):
   return f
 
 def appref(rank_prefs):
-  '''Calculates the APpref, which is ppref@k averaged over the k's (ranks) where
-  rpref(k) != rpref(k-1).'''
-  # list of (rpref, rank), making sure we include the first rank
-  # rpref can only change when we encounter a ranked preferred doc
-  if len(rank_prefs.preferred_ranks) == 0 or rank_prefs.preferred_ranks[0] != 1:
-    rank_prefs.preferred_ranks = [1] + rank_prefs.preferred_ranks
-  rprefs = [(i, rpref(i)(rank_prefs)) for i in rank_prefs.preferred_ranks]
-  #print rprefs
-  # average ppref across ranks where rpref changes.
-  rpref_change_ranks = [1] + [rprefs[i][0] for i in xrange(1,len(rprefs)) \
-                              if rprefs[i][1] != rprefs[i-1][1]]
-  #print rpref_change_ranks
-  pprefs = [ ppref(i)(rank_prefs) \
-              for i in rpref_change_ranks ]
-  #print pprefs
-  return sum(pprefs) / len(rpref_change_ranks)
+  '''Calculates the APpref, which is ppref@k averaged over the ranks of all the
+  documents that have ever been preferred, including the the UNRANKED
+  preferred documents.
+
+  Note: This calculation differs from the description of APpref in the above
+  citation, but tends to produce more sensible results when preferred documents
+  are not retrieved by the system.'''
+  ranks_to_eval = rank_prefs.preferred_ranks
+  ppref_sum = sum(ppref(i)(rank_prefs) for i in rank_prefs.preferred_ranks) + \
+                ppref(rank_prefs.UNRANKED)(rank_prefs) * \
+                  rank_prefs.count_preferred_unranked
+  return ppref_sum / num_preferred(rank_prefs)
 
 def ppref_max(rank_prefs):
   '''Calculates the maximum ppref over all ranks'''

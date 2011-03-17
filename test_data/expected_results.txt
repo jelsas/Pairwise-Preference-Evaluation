@@ -26,4 +26,4 @@ mwpref10             	all	16.6446
 mnwpref1             	all	0.5000
 mnwpref5             	all	0.7392
 mnwpref10            	all	0.6851
-mAPpref              	all	0.6796
+mAPpref              	all	0.4594
