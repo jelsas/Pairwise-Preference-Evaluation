@@ -18,7 +18,7 @@ pairwise_pref_eval.py [-q] [-v] [-i] PREFERENCES_FILE RESULTS_FILE
                   -1 -- indicates SOURCE_DOC preferred to TARGET_DOC
                    0 -- indicates SOURCE_DOC and TARGET_DOC are duplicates
                    1 -- indicates TARGET_DOC preferred to SOURCE_DOC
-                   2 -- indicates TARGET_DOC is BAD, SOURCE_DOC shoudl be "NA"
+                   2 -- indicates TARGET_DOC is BAD, SOURCE_DOC should be "NA"
   RESULTS_FILE is in the standard 5-column TREC format 
     QID "Q0" DOC RANK SCORE [COMMENT+]
   Note:
