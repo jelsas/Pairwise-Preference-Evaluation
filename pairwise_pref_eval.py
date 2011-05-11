@@ -353,6 +353,9 @@ def appref(rank_prefs):
   Note: This calculation differs from the description of APpref in the above
   citation, but tends to produce more sensible results when preferred documents
   are not retrieved by the system.'''
+  total_preferred = num_preferred(rank_prefs)
+  if total_preferred == 0:
+    return 0
   ranks_to_eval = rank_prefs.preferred_ranks
   ppref_sum = sum(ppref(i)(rank_prefs) for i in rank_prefs.preferred_ranks) + \
                 ppref(rank_prefs.UNRANKED)(rank_prefs) * \
