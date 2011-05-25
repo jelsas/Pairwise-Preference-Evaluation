@@ -47,19 +47,18 @@ class PreferenceGraph(object):
 
   def add_bad_doc(self, bad_doc):
     '''Adds a document to the set of BAD docs. If the document has already been
-    assessed as preferred to any other document, a ValueError is raised.'''
+    assessed as preferred to any other document, it is silently ignored.'''
     if bad_doc in self.preferred:
       pass
-      #raise ValueError('Doc %s can not be both preferred & bad' % bad_doc)
     else:
       self.bad_docs.add(bad_doc)
 
   def add_edge(self, from_vertex, to_vertex, weight = 1):
-    '''Adds an edge in the preference graph. ValueError is raised if an edge is
-    added where the preferred document has previously been added as BAD.'''
+    '''Adds an edge in the preference graph. If an edge is added where the 
+    preferred document has previously been added as BAD, the edge is silently 
+    ignored.'''
     if from_vertex in self.bad_docs:
       pass
-      #raise ValueError('Doc %s can not be both preferred & bad' % from_vertex)
     else:
       self.edges.add( (from_vertex, to_vertex, weight) )
 
