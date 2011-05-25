@@ -63,7 +63,10 @@ class PreferenceGraph(object):
       self.edges.add( (from_vertex, to_vertex, weight) )
 
   def all_path_lengths(self, transitive=True):
-    '''Floyd-Warshall algorithm to find the distance of all minimum-length paths between any two vetices. Returns a dictionary such that d[(i, j)] is the shortest path between nodes i and j. If no such path exists, this key won't be present in the dictionary. This algorithm runs in O(|V|**3).
+    '''Floyd-Warshall algorithm to find the distance of all minimum-length 
+    paths between any two vetices. Returns a dictionary such that d[(i, j)] 
+    is the shortest path between nodes i and j. If no such path exists, this 
+    key won't be present in the dictionary. This algorithm runs in O(|V|**3).
 
     If transitive=False, only explicit preferences are assumed, and the F-W
     algorithm is not run.
